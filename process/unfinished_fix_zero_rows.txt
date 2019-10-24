@@ -1,0 +1,19 @@
+a = np.concatenate((np.ones(5).reshape(1,5), np.zeros([3,5])),axis=0)
+print(a)
+while np.count_nonzero(a.sum(axis=1)) != a.shape[0]:
+    np.apply_along_axis(np.random.shuffle,0,a)
+    print(np.count_nonzero(a.sum(axis=1)) == a.shape[0])
+print(a)
+
+np.apply_along_axis(np.random.shuffle,0,a)
+print(np.count_nonzero(a.sum(axis=1)) == a.shape[0])
+
+a = np.concatenate((np.ones(10).reshape(1,10), np.zeros([5,10])),axis=0)
+
+print(a)
+zero_rows = np.argwhere(~a.any(axis=1)).flatten()
+print(zero_rows)
+a.sum(axis=1).argsort()[::-1]
+# np.argwhere(a[0,:]==1).flatten()[0]
+
+zero_rows[::-1]

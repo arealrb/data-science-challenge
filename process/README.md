@@ -1,0 +1,1 @@
+This folder contains the files used during the process of understanding the problem and formulating a solution. It is messy, as the process is :)
