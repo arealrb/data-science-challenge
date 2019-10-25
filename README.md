@@ -1,0 +1,1 @@
+[NBViewer >> Solution.ipynb](https://nbviewer.jupyter.org/github/arealrb/data-science-challenge/blob/rba/Solution.ipynb)
