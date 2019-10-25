@@ -1,42 +1,15 @@
 import pandas as pd
-
-pd.set_option('display.max_rows', 500)
-pd.set_option('display.max_columns', 500)
-pd.set_option('display.width', 1000)
+# pd.set_option('display.max_rows', 500)
+# pd.set_option('display.max_columns', 500)
+# pd.set_option('display.width', 1000)
 import numpy as np
-import os
+import zipfile
+import re
+from io import BytesIO
 import matplotlib.pyplot as plt
 from scipy.stats import kurtosis, skew
 from sklearn.preprocessing import OneHotEncoder
 from multiprocessing import Pool, cpu_count
-
-clients = pd.read_csv('clients.csv')
-editors = pd.read_csv('editors.csv')
-tasks = pd.read_csv('tasks.csv')
-tickets = pd.read_csv('tickets.csv')
-tickets_clients = pd.merge(left=tickets, right=clients, how='left', left_on='client_id.1', right_on='id')
-tasks_tickets_clients = pd.merge(left=tasks, right=tickets_clients, how='left', left_on='ticket_id', right_on='id_x')
-
-editors.drop(editors.columns[0], axis=1, inplace=True)
-editors.reset_index(inplace=True)
-editors_r = editors.sample(frac=1, random_state=42)
-editors_r.reset_index(drop=True, inplace=True)
-editors_r['language_pair'] = tasks_tickets_clients.language_pair.sample(n=418, random_state=42).values
-domains = 'travel,fintech,ecommerce,sports,gamming,health_care'.split(',')
-
-# nl_en
-nl_en_tasks = tasks_tickets_clients.loc[tasks_tickets_clients['language_pair'] == 'nl_en']
-enc = OneHotEncoder()
-nl_en_jde = enc.fit_transform(nl_en_tasks['domain'][:, None]).toarray()
-# fix col order to ['travel', 'fintech', 'ecommerce', 'sports', 'gamming', 'health_care']
-nl_en_jdedf = pd.DataFrame(nl_en_jde, columns=enc.categories_)
-nl_en_job_domain = nl_en_jdedf[domains].values
-nl_en_job_words = nl_en_tasks['number_words_x'].values
-nl_en_editors = editors_r[editors_r['language_pair'] == 'nl_en']
-nl_en_editor_domain_skill = nl_en_editors[domains].values
-nl_en_editor_domain_quality = pd.DataFrame(nl_en_editor_domain_skill).apply(lambda x: np.mean(x / 5) * (x / 5),
-                                                                            axis=1).values
-
 
 ###############
 def shuffle_mat_nozerorow(mat_a):
@@ -220,12 +193,12 @@ def genetic_algorithm(_pop, elite_size, mut_rate, balance_penalty,
     pop_ranks.append(pop_rank_df)
 
     for gen in range(1, generations):
-        pop = next_gen(_pop, pop_rank_df, elite_size, mut_rate)
+        _pop = next_gen(_pop, pop_rank_df, elite_size, mut_rate)
         pop_rank_df = rank_pop(_pop, _job_domain, _agent_domain_quality, gen, balance_penalty)
         print(pop_rank_df.head(1))
         pop_ranks.append(pop_rank_df)
 
-    best_ind = pop[pop_rank_df['index'].values[0]]
+    best_ind = _pop[pop_rank_df['index'].values[0]]
     return pop_ranks, best_ind
 
 
@@ -240,12 +213,12 @@ def genetic_algorithm_mp(_pop, elite_size, mut_rate, balance_penalty,
     pop_ranks.append(pop_rank_df)
 
     for gen in range(1, generations):
-        pop = next_gen(_pop, pop_rank_df, elite_size, mut_rate)
+        _pop = next_gen(_pop, pop_rank_df, elite_size, mut_rate)
         pop_rank_df = rank_pop_mp(_pop, _job_domain, _agent_domain_quality, gen, balance_penalty, pool)
         print(pop_rank_df.head(1))
         pop_ranks.append(pop_rank_df)
 
-    best_ind = pop[pop_rank_df['index'].values[0]]
+    best_ind = _pop[pop_rank_df['index'].values[0]]
     return pop_ranks, best_ind
 
 
@@ -261,28 +234,68 @@ def gen_pop_mp(_popsize, shape: tuple, pool):
 
 
 if __name__ == "__main__":
-    num_processors = cpu_count()
-    pool = Pool(processes=num_processors)
-    print(f'using {num_processors} processors')
+    # load data
+    archive = zipfile.ZipFile('dataset.zip', 'r')
+    clients = pd.read_csv(BytesIO(archive.read('clients.csv')))
+    editors = pd.read_csv(BytesIO(archive.read('editors.csv')))
+    tasks = pd.read_csv(BytesIO(archive.read('tasks.csv')))
+    tickets = pd.read_csv(BytesIO(archive.read('tickets.csv')))
+    # clients = pd.read_csv('clients.csv')
+    # editors = pd.read_csv('editors.csv')
+    # tasks = pd.read_csv('tasks.csv')
+    # tickets = pd.read_csv('tickets.csv')
+    tickets_clients = pd.merge(left=tickets, right=clients, how='left', left_on='client_id.1', right_on='id')
+    tasks_tickets_clients = pd.merge(left=tasks, right=tickets_clients, how='left', left_on='ticket_id',
+                                     right_on='id_x')
+    editors.drop(editors.columns[0], axis=1, inplace=True)
+    editors.reset_index(inplace=True)
+    editors_r = editors.sample(frac=1, random_state=42)
+    editors_r.reset_index(drop=True, inplace=True)
+    editors_r['language_pair'] = tasks_tickets_clients.language_pair.sample(n=418, random_state=42).values
+    domains = 'travel,fintech,ecommerce,sports,gamming,health_care'.split(',')
+    # nl_en
+    nl_en_tasks = tasks_tickets_clients.loc[tasks_tickets_clients['language_pair'] == 'nl_en']
+    enc = OneHotEncoder()
+    nl_en_jde = enc.fit_transform(nl_en_tasks['domain'][:, None]).toarray()
+    # fix col order to ['travel', 'fintech', 'ecommerce', 'sports', 'gamming', 'health_care']
+    nl_en_jdedf = pd.DataFrame(nl_en_jde, columns=enc.categories_)
+    nl_en_job_domain = nl_en_jdedf[domains].values
+    nl_en_job_words = nl_en_tasks['number_words_x'].values
+    nl_en_editors = editors_r[editors_r['language_pair'] == 'nl_en']
+    nl_en_editor_domain_skill = nl_en_editors[domains].values
+    nl_en_editor_domain_quality = pd.DataFrame(nl_en_editor_domain_skill).apply(lambda x: np.mean(x / 5) * (x / 5),
+                                                                                axis=1).values
+    # data loaded
 
+    # parameters
     shape = (89, 16290)
-    pop_size = 10
-    print('generating pop')
-    ini_pop = gen_pop_mp(pop_size, shape, pool)
-    elite_size = int(0.2 * pop_size)
-    mut_rate = 0.1
-    balance_penalty = 50
-    generations = 10
-    print('running ga')
-    pop_ranks, best_ind = genetic_algorithm_mp(ini_pop, elite_size, mut_rate, balance_penalty,
-                                               generations, nl_en_job_domain, nl_en_editor_domain_quality, pool)
+    pop_size = 50
+    elite_size = 8
+    mut_rate = 0.01
+    balance_penalty = 1
+    generations = 500
 
-    pool.close()
-    pool.join()
+    # # with MP
+    # # open mp pool
+    # num_processors = cpu_count()
+    # pool = Pool(processes=num_processors)
+    # print(f'using {num_processors} processors')
+    # print('generating pop')
+    # ini_pop = gen_pop_mp(pop_size, shape, pool)
+    # print('running ga')
+    # pop_ranks, best_ind = genetic_algorithm_mp(ini_pop, elite_size, mut_rate, balance_penalty,
+    #                                            generations, nl_en_job_domain, nl_en_editor_domain_quality, pool)
+    # pool.close()
+    # pool.join()
+
+    # no MP
+    ini_pop = gen_pop(pop_size, shape, 42)
+    pop_ranks, best_ind = genetic_algorithm(ini_pop, elite_size, mut_rate, balance_penalty,
+                                            generations, nl_en_job_domain, nl_en_editor_domain_quality)
 
     allpop_ranks = pd.concat(pop_ranks)
-    allpop_ranks.groupby('gen')['fitness'].max().plot()
-    plt.show()
+    # allpop_ranks.groupby('gen')['fitness'].max().plot()
+    # plt.show()
     fname = f'results/nl_en_pop{pop_size}_elite{elite_size}' \
             f'_mutrate{mut_rate}_balancep{balance_penalty}_gens{generations}'
     allpop_ranks.groupby('gen').head(1).to_csv(fname+'.csv', index=False)
